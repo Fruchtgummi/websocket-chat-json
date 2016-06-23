@@ -34,7 +34,8 @@ type Orbit struct {
 	verteiler chan mess
 	anmelden  chan subs
 	abmelden  chan subs
-	rooms     map[int]map[*Link]bool
+
+	rooms map[int]map[*Link]bool
 }
 
 var orbit = Orbit{
@@ -42,7 +43,8 @@ var orbit = Orbit{
 	verteiler: make(chan mess),
 	anmelden:  make(chan subs),
 	abmelden:  make(chan subs),
-	rooms:     make(map[int]map[*Link]bool),
+
+	rooms: make(map[int]map[*Link]bool),
 }
 
 type Link struct {
@@ -95,15 +97,13 @@ func (o *Orbit) start() {
 
 }
 
-func (l *Link) schreiben(mt int, p []byte) error {
+func (s *subs) schreiben(mt int, p []byte) error {
 	log.Println(mt, p)
-	l.webs.SetWriteDeadline(time.Now().Add(schreibZeit))
-	return l.webs.WriteMessage(mt, p)
+	s.li.webs.SetWriteDeadline(time.Now().Add(schreibZeit))
+	return s.li.webs.WriteMessage(mt, p)
 }
 
 func (s *subs) schreibeWsJSON(r *http.Request) {
-
-	json := map[string]interface{}{}
 
 	l := s.li
 
@@ -118,23 +118,14 @@ func (s *subs) schreibeWsJSON(r *http.Request) {
 
 		case message, ok := <-l.transmit:
 			if !ok {
-				l.schreiben(websocket.CloseMessage, []byte{})
+				s.schreiben(websocket.CloseMessage, []byte{})
 			}
 
-			l.webs.SetWriteDeadline(time.Now().Add(schreibZeit))
-			w, err := l.webs.NextWriter(websocket.TextMessage)
-			if err != nil {
-				return
-			}
-
-			log.Println(w)
-
+			l.webs.SetWriteDeadline(time.Now().Add(schreibZeit)) //sau wichtig
 			l.webs.WriteJSON(message)
 
-			log.Println(message, json)
-
 		case <-ticker.C:
-			if err := l.schreiben(websocket.PingMessage, []byte{}); err != nil {
+			if err := s.schreiben(websocket.PingMessage, []byte{}); err != nil {
 				return
 			}
 
@@ -168,6 +159,7 @@ func (s *subs) leseWsJSON() {
 			}
 			break
 		}
+
 		m := mess{json, s.room}
 		orbit.verteiler <- m
 	}
@@ -186,10 +178,8 @@ func cWs(w http.ResponseWriter, r *http.Request) {
 
 	log.Println("Erfolgreich, erneuere Verbindung")
 
-	roomnumber := 1 // <- value from GET, POST or Session
-
-	link := &Link{transmit: make(chan map[string]interface{}), webs: cws}
-	s := subs{link, roomnumber}
+	link := &Link{transmit: make(chan map[string]interface{}), webs: cws, room: GetSessionValueInt(r, "project")}
+	s := subs{link, GetSessionValueInt(r, "project")}
 	orbit.anmelden <- s
 	go s.schreibeWsJSON(r)
 	s.leseWsJSON()
