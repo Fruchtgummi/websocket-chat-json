@@ -98,7 +98,6 @@ func (o *Orbit) start() {
 }
 
 func (s *subs) schreiben(mt int, p []byte) error {
-	log.Println(mt, p)
 	s.li.webs.SetWriteDeadline(time.Now().Add(schreibZeit))
 	return s.li.webs.WriteMessage(mt, p)
 }
@@ -121,7 +120,7 @@ func (s *subs) schreibeWsJSON(r *http.Request) {
 				s.schreiben(websocket.CloseMessage, []byte{})
 			}
 
-			l.webs.SetWriteDeadline(time.Now().Add(schreibZeit)) //sau wichtig
+			l.webs.SetWriteDeadline(time.Now().Add(schreibZeit))
 			l.webs.WriteJSON(message)
 
 		case <-ticker.C:
@@ -178,9 +177,12 @@ func cWs(w http.ResponseWriter, r *http.Request) {
 
 	log.Println("Erfolgreich, erneuere Verbindung")
 
-	link := &Link{transmit: make(chan map[string]interface{}), webs: cws, room: GetSessionValueInt(r, "project")}
-	s := subs{link, GetSessionValueInt(r, "project")}
+	var raummnummer int = 1 // Roomnumber from GET,POST or SESSION..., what ever!
+
+	link := &Link{transmit: make(chan map[string]interface{}), webs: cws, room: raummnummer}
+	s := subs{link, raummnummer}
 	orbit.anmelden <- s
 	go s.schreibeWsJSON(r)
 	s.leseWsJSON()
+
 }
